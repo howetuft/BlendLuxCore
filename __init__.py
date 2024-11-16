@@ -68,8 +68,8 @@ except ImportError as error:
 bl_info = {
     "name": "LuxCoreRender",
     "author": "Simon Wendsche (B.Y.O.B.), Michael Klemm (neo2068), Odilkhan Yakubov (odil24), acasta69, u3dreal, Philstix",
-    "version": (2, 7),
-    "blender": (3, 6, 0),
+    "version": (2, 9),
+    "blender": (4, 2, 3),
     "category": "Render",
     "description": "LuxCoreRender integration for Blender",
     "warning": "beta2",
@@ -81,12 +81,13 @@ from . import properties, engine, handlers, operators, ui, nodes
 
 
 def register():
-    engine.register()
-    handlers.register()
-    operators.register()
-    properties.register()
-    ui.register()
-    nodes.register()
+    # TODO
+    # engine.register()
+    # handlers.register()
+    # operators.register()
+    # properties.register()
+    # ui.register()
+    # nodes.register()
 
     from .utils.log import LuxCoreLog
     pyluxcore.Init(LuxCoreLog.add)
