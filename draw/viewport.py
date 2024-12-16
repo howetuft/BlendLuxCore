@@ -190,7 +190,12 @@ class FrameBuffer:
             "-nrm", self._normal_file_path,
             "-o", self._denoised_file_path,
         ]
-        self._denoiser_process = subprocess.Popen(args)
+        self._denoiser_process = subprocess.Popen(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
 
     def is_denoiser_active(self):
         return self._denoiser_process is not None
@@ -199,6 +204,12 @@ class FrameBuffer:
         return self._denoiser_process.poll() is not None
 
     def load_denoiser_result(self, scene):
+        with self._denoiser_process.stdout as d_out:
+            if d_out:
+                print("Denoiser output:")
+                for line in d_out:
+                    print(line, end='')
+        print("Denoiser return code:", self._denoiser_process.returncode)
         self._denoiser_process = None
         shape = (self._height * self._width * 3)
         try:
