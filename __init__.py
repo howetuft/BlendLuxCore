@@ -30,20 +30,26 @@ with open(manifest_path, "rb") as f:
 version_string = manifest_data['version']
 
 # The variable PYLUXCORE_VERSION specifies the release version of pyluxcore
-# that will be downloaded from PyPi during the standard installation of BlendLuxCore.
-# Only update this variable after the targeted version of pyluxcore has been released on PyPi.
+# that will be downloaded from PyPi during the standard installation of
+# BlendLuxCore. Only update this variable after the targeted version of
+# pyluxcore has been released on PyPi.
 PYLUXCORE_VERSION = '2.11.0-dev0'
 
 # Check the location of this init file. The init file in the local dev folder returns only 'BlendLuxCore'
 am_in_extension = __package__.startswith("bl_ext.")
 
+# TODO Remove
 # The environment variable BLC_DEV_PATH can be used to store a path
 # to a local BlendLuxCore repository, which will then be imported
 blc_dev_path = os.environ.get("BLC_DEV_PATH")
+if blc_dev_path:
+    print("BLC_DEV_PATH found: ", blc_dev_path)
 
 # The environment variable BLC_WHEEL_PATH can be used to store a path
 # to a local pyluxcore wheel, which will then be installed
 blc_wheel_path = os.environ.get("BLC_WHEEL_PATH")
+if blc_wheel_path:
+    print("BLC_WHEEL_PATH found: ", blc_wheel_path)
 
 if am_in_extension:
     root_folder = pathlib.Path(bpy.utils.extension_path_user(__package__, path="", create=True))
