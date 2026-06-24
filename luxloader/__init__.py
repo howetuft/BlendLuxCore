@@ -288,6 +288,11 @@ def _install_wheels():
     # Second, add new wheels
     apply(wheel_list)
 
+    # Third, add to sys.path
+    if os.path.exists(site_packages):
+        if site_packages not in sys.path:
+            sys.path.append(site_packages)
+
 
 class WheelSource(IntEnum):
     """Permitted values for wheel source (from BlendLuxHelper)."""
