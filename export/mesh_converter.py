@@ -12,7 +12,6 @@ import pyluxcore
 from . import caches
 from .. import utils
 from ..utils.log import log, log_str
-from ..utils.errorlog import LuxCoreErrorLog
 
 if _needs_reload:
     import importlib
@@ -199,8 +198,8 @@ def extract_mesh_data(obj, depsgraph):
             and vert_crease_attr.domain == "POINT"
             and np.any(get_ndarray(vert_crease_attr.data, "value", 0, np.float32) > 0.0)
         ):
-            print(
-                "[BLC] Warning: vertex creases (crease_vert) are not exported "
+            log(
+                "Warning: vertex creases (crease_vert) are not exported "
                 "(OpenSubdiv topology descriptors only support edge creases)"
             )
 
@@ -316,7 +315,6 @@ def _compute_submeshes_py(data, mesh_key, transform, is_viewport_render, use_ins
 
     loop_vertices = data["loop_vertices"]
     vertex_points = data["vertex_points"]
-    vertex_normals = data["vertex_normals"]
     loop_normals = data["loop_normals"]
     triangle_loops = data["triangle_loops"]
     loop_triangle_materials = data["loop_triangle_materials"]
@@ -752,7 +750,8 @@ def _compute_submeshes_py(data, mesh_key, transform, is_viewport_render, use_ins
     _stage('payloads', _t)
     duration = time() - start_time
     if _stage_t is not None:
-        print(f"[BLC-STAGES] {mesh_key}: " + " ".join(f"{k}={v:.3f}" for k, v in _stage_t.items()), flush=True)
+        emit("[BLC-STAGES] " + str(mesh_key) + ": " +
+             " ".join(f"{k}={v:.3f}" for k, v in _stage_t.items()))
     info = dict(duration=duration, num_points=num_points,
                 num_raw=len(vertex_points))
     return payloads, info
