@@ -884,7 +884,12 @@ def convert_objects(jobs, depsgraph, luxcore_scene, exporter=None,
     # How many objects may be extracted-but-not-yet-converted at once. This
     # bounds the memory held by in-flight extracted data + payloads, so scenes
     # with a few huge objects don't hold the whole scene's meshes at once.
-    inflight_max = int(os.environ.get("BLC_EXPORT_INFLIGHT", "4"))
+    # The window also caps parallelism at inflight_max objects, so by default
+    # it follows the pool size (capped at 8: HallBench pre-pass 3.5s at a
+    # window of 4 vs 2.8s at 8 for +120MB peak RSS, 2.6s at 16 for +400MB).
+    inflight_max = int(os.environ.get("BLC_EXPORT_INFLIGHT", "0")) or max(
+        4, min(max_workers, 8)
+    )
 
     results = [None] * len(jobs)
     debug = bool(os.environ.get("BLC_DEBUG_EXPORT"))
