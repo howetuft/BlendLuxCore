@@ -219,6 +219,11 @@ def extract_mesh_data(obj, depsgraph):
 
 _compute_submeshes_c = getattr(pyluxcore, "compute_submeshes_c", None)
 
+# DefineMeshExt can set a constant per-triangle AOV itself (tri_aov_index /
+# tri_aov_value, added to pyluxcore): avoids a separate SetMeshTriangleAOV
+# round-trip per submesh (numpy alloc + GIL-held copy + mesh-def mutex)
+_DEFINE_EXT_HAS_TRI_AOV = "tri_aov_index" in (pyluxcore.Scene.DefineMeshExt.__doc__ or "")
+
 
 def compute_submeshes(data, mesh_key, transform, is_viewport_render, use_instancing,
                       share_points=True, log_lines=None):
@@ -766,6 +771,12 @@ def define_submeshes(luxcore_scene, payloads):
     """
     mesh_definitions = []
     for i, payload in enumerate(payloads):
+        extra = {}
+        if _DEFINE_EXT_HAS_TRI_AOV:
+            # Set the material-slot AOV inside DefineMeshExt (no extra
+            # pybind round-trip / GIL-held array copy per submesh)
+            extra["tri_aov_index"] = MATERIAL_TRI_AOV_INDEX
+            extra["tri_aov_value"] = float(payload["slot"])
         luxcore_scene.DefineMeshExt(
             name=payload["name"],
             points=payload["points"],
@@ -783,11 +794,13 @@ def define_submeshes(luxcore_scene, payloads):
             crease_pairs=payload["crease_pairs"] if i == 0 else None,
             crease_weights=payload["crease_weights"] if i == 0 else None,
             normals_pretransformed=payload.get("normals_pretransformed", False),
+            **extra,
         )
-        luxcore_scene.SetMeshTriangleAOV(
-            payload["name"], MATERIAL_TRI_AOV_INDEX,
-            np.full(len(payload["triangles"]), payload["slot"], dtype=np.float32),
-        )
+        if not _DEFINE_EXT_HAS_TRI_AOV:
+            luxcore_scene.SetMeshTriangleAOV(
+                payload["name"], MATERIAL_TRI_AOV_INDEX,
+                np.full(len(payload["triangles"]), payload["slot"], dtype=np.float32),
+            )
         mesh_definitions.append((payload["name"], payload["mat"], payload["slot"]))
 
     # Per-face material slot, consumed by the C++ subdiv envelope builder

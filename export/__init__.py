@@ -402,6 +402,8 @@ class Exporter(object):
 
             if self.material_cache.diff(depsgraph):
                 changes |= Change.MATERIAL
+                # Materials changed: drop the per-material export memo
+                self.object_cache2._mat_memo.clear()
 
             if self.visibility_cache.diff(depsgraph, context):
                 changes |= Change.VISIBILITY
