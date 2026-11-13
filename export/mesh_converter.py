@@ -223,6 +223,9 @@ _compute_submeshes_c = getattr(pyluxcore, "compute_submeshes_c", None)
 # tri_aov_value, added to pyluxcore): avoids a separate SetMeshTriangleAOV
 # round-trip per submesh (numpy alloc + GIL-held copy + mesh-def mutex)
 _DEFINE_EXT_HAS_TRI_AOV = "tri_aov_index" in (pyluxcore.Scene.DefineMeshExt.__doc__ or "")
+# Batch define (one GIL release + one mesh-def lock for all submeshes of an
+# object, instead of one pybind call per submesh)
+_DEFINE_MESHES_EXT = hasattr(pyluxcore.Scene, "DefineMeshesExt")
 
 
 def compute_submeshes(data, mesh_key, transform, is_viewport_render, use_instancing,
@@ -770,6 +773,27 @@ def define_submeshes(luxcore_scene, payloads):
     Returns the ExportedMesh with the per-submesh material definitions.
     """
     mesh_definitions = []
+    if _DEFINE_MESHES_EXT:
+        # Batch path: all submeshes of this object defined in one C++ call
+        batch = []
+        for i, payload in enumerate(payloads):
+            d = dict(payload)
+            # All submeshes share the same welded point array, so the
+            # crease pairs (welded point indices) are identical for all
+            # of them: set them only on the first submesh. The subdiv
+            # envelope builder does not read per-submesh creases, and a
+            # single-submesh object is its own first submesh.
+            if i != 0:
+                d["crease_pairs"] = None
+                d["crease_weights"] = None
+            if _DEFINE_EXT_HAS_TRI_AOV:
+                d["tri_aov_index"] = MATERIAL_TRI_AOV_INDEX
+                d["tri_aov_value"] = float(payload["slot"])
+            batch.append(d)
+        luxcore_scene.DefineMeshesExt(batch)
+        for payload in payloads:
+            mesh_definitions.append((payload["name"], payload["mat"], payload["slot"]))
+        return caches.exported_data.ExportedMesh(mesh_definitions)
     for i, payload in enumerate(payloads):
         extra = {}
         if _DEFINE_EXT_HAS_TRI_AOV:
