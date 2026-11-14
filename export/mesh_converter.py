@@ -202,18 +202,18 @@ def extract_mesh_data(obj, depsgraph):
                 "(OpenSubdiv topology descriptors only support edge creases)"
             )
 
-        return dict(
-            loop_vertices=loop_vertices,
-            vertex_points=vertex_points,
-            vertex_normals=vertex_normals,
-            loop_normals=loop_normals,
-            triangle_loops=triangle_loops,
-            loop_triangle_materials=loop_triangle_materials,
-            loop_uvs=loop_uvs,
-            color_attrs=color_attrs,
-            edge_verts=edge_verts,
-            edge_crease=edge_crease,
-        )
+        return {
+            "loop_vertices": loop_vertices,
+            "vertex_points": vertex_points,
+            "vertex_normals": vertex_normals,
+            "loop_normals": loop_normals,
+            "triangle_loops": triangle_loops,
+            "loop_triangle_materials": loop_triangle_materials,
+            "loop_uvs": loop_uvs,
+            "color_attrs": color_attrs,
+            "edge_verts": edge_verts,
+            "edge_crease": edge_crease,
+        }
 
 
 _compute_submeshes_c = getattr(pyluxcore, "compute_submeshes_c", None)
@@ -378,11 +378,10 @@ def convert(
     """Convert one object: extract (main thread), compute, define."""
     start_time = time()
 
-    data = extract_mesh_data(obj, depsgraph)
-    if data is None:
+    if (data := extract_mesh_data(obj, depsgraph)) is None:
         return None
 
-    payloads, info = compute_submeshes(
+    payloads, _info = compute_submeshes(
         data, mesh_key, transform, is_viewport_render, use_instancing,
         share_points=share_points,
     )
@@ -429,7 +428,7 @@ def convert_objects(jobs, depsgraph, luxcore_scene, exporter=None,
         data, job = args
         if data is None:
             return None
-        _obj, mesh_key, transform, is_viewport_render, use_instancing, share_points = job
+        mesh_key, transform, is_viewport_render, use_instancing, share_points = job[1:]
         # Buffer this mesh's log messages: they are printed by the main
         # thread in _collect, so the lines of each mesh stay grouped together
         log_lines = []
@@ -441,8 +440,7 @@ def convert_objects(jobs, depsgraph, luxcore_scene, exporter=None,
         return result, info, log_lines
 
     def _collect(result_index, fut):
-        comp = fut.result()
-        if comp is None:
+        if (comp := fut.result()) is None:
             return
         results[result_index], info, log_lines = comp
         if exporter and exporter.stats:
@@ -497,11 +495,8 @@ def _prepare_mesh(obj, depsgraph):
     object_eval = None
 
     try:
-        object_eval = obj.evaluated_get(depsgraph)
-        if object_eval:
-            mesh = object_eval.to_mesh()
-
-            if mesh:
+        if (object_eval := obj.evaluated_get(depsgraph)):
+            if mesh := object_eval.to_mesh():
                 # TODO test if this makes sense
                 # has been tested briefly for_v2.10. Seems to work, also
                 # including custom normals now
