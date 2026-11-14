@@ -147,7 +147,20 @@ class Exporter(object):
         self.camera_cache.diff(
             self, scene, depsgraph, context
         )  # Init camera cache
-        luxcore_scene.Parse(self.camera_cache.props)
+        # The early camera Parse is only needed when hair curves are present
+        # (strands tessellation reads the camera while shapes are parsed).
+        # Without hair, fold the camera props into the single full Parse
+        # below instead of parsing the scene twice.
+        has_hair = any(
+            obj.type == "CURVES"
+            and obj.data is not None
+            and obj.data.rna_type.name == "Hair Curves"
+            for obj in view_layer.objects
+        )
+        if has_hair:
+            luxcore_scene.Parse(self.camera_cache.props)
+        else:
+            scene_props.Set(self.camera_cache.props)
 
         if utils.is_valid_camera(scene.camera):
             blur_settings = scene.camera.data.luxcore.motion_blur

@@ -308,19 +308,20 @@ def define_submeshes(luxcore_scene, payloads):
         # Batch path: all submeshes of this object defined in one C++ call
         batch = []
         for i, payload in enumerate(payloads):
-            d = dict(payload)
             # All submeshes share the same welded point array, so the
             # crease pairs (welded point indices) are identical for all
             # of them: set them only on the first submesh. The subdiv
             # envelope builder does not read per-submesh creases, and a
             # single-submesh object is its own first submesh.
+            # The payload dicts are ours (built by compute_submeshes), so
+            # mutate them in place instead of copying each one.
             if i != 0:
-                d["crease_pairs"] = None
-                d["crease_weights"] = None
+                payload["crease_pairs"] = None
+                payload["crease_weights"] = None
             if _DEFINE_EXT_HAS_TRI_AOV:
-                d["tri_aov_index"] = MATERIAL_TRI_AOV_INDEX
-                d["tri_aov_value"] = float(payload["slot"])
-            batch.append(d)
+                payload["tri_aov_index"] = MATERIAL_TRI_AOV_INDEX
+                payload["tri_aov_value"] = float(payload["slot"])
+            batch.append(payload)
         luxcore_scene.DefineMeshesExt(batch)
         for payload in payloads:
             mesh_definitions.append((payload["name"], payload["mat"], payload["slot"]))
@@ -415,9 +416,14 @@ def convert_objects(jobs, depsgraph, luxcore_scene, exporter=None,
     # parallelism at its own size, so it must be at least the pool size or
     # the pool starves; it also bounds the memory held by in-flight extracted
     # data + payloads (scenes with a few huge objects never hold the whole
-    # scene's meshes at once). Defaults to the pool size; override with
-    # BLC_EXPORT_INFLIGHT.
-    inflight_max = int(os.environ.get("BLC_EXPORT_INFLIGHT", "0")) or max_workers
+    # scene's meshes at once). Defaults to 3x the pool size: extraction is
+    # serial in the calling thread, so a larger window keeps the pool busy
+    # while the next object is being extracted (measured knee: CannelleEtFromage
+    # pre-pass 2.09s -> 1.65s, HallBench 2.72s -> 2.29s at 8 workers / 24
+    # inflight). Override with BLC_EXPORT_INFLIGHT.
+    inflight_max = (
+        int(os.environ.get("BLC_EXPORT_INFLIGHT", "0")) or 3 * max_workers
+    )
 
     results = [None] * len(jobs)
     debug = bool(os.environ.get("BLC_DEBUG_EXPORT"))
