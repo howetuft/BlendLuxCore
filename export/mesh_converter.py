@@ -38,6 +38,15 @@ MIN_ISLAND_MERGE_COS_ANGLE = float(np.cos(np.deg2rad(30.0)))
 # is a measurable cost on fragment-heavy models)
 _DEBUG_MESH = bool(os.environ.get("BLC_DEBUG_MESH"))
 
+# Default size of the mesh pre-pass thread pool. A fixed constant, not
+# os.cpu_count(), so export behaves identically on every machine. The compute
+# phase releases the GIL and TBB parallelizes its inner loops; the pool's
+# job is to overlap the serial parts (Blender-API extraction, scene insertion
+# under pyluxcore's mesh mutex) with other objects' compute. HallBench
+# pre-pass wall: 3.5s at 4 workers, 2.8s at 8 (+120MB peak RSS), 2.6s at 16
+# (+400MB) -- 8 is the knee. Override with BLC_EXPORT_WORKERS.
+DEFAULT_EXPORT_WORKERS = 8
+
 
 # https://blenderartists.org/t/\
 # efficient-copying-of-vertex-coords-to-and-from-numpy-arrays/661467/2
@@ -878,18 +887,16 @@ def convert_objects(jobs, depsgraph, luxcore_scene, exporter=None,
     Returns a list of ExportedMesh (or None), aligned with jobs.
     """
     if max_workers is None:
-        max_workers = int(os.environ.get("BLC_EXPORT_WORKERS", "0")) or min(
-            16, os.cpu_count() or 4
+        max_workers = (
+            int(os.environ.get("BLC_EXPORT_WORKERS", "0")) or DEFAULT_EXPORT_WORKERS
         )
-    # How many objects may be extracted-but-not-yet-converted at once. This
-    # bounds the memory held by in-flight extracted data + payloads, so scenes
-    # with a few huge objects don't hold the whole scene's meshes at once.
-    # The window also caps parallelism at inflight_max objects, so by default
-    # it follows the pool size (capped at 8: HallBench pre-pass 3.5s at a
-    # window of 4 vs 2.8s at 8 for +120MB peak RSS, 2.6s at 16 for +400MB).
-    inflight_max = int(os.environ.get("BLC_EXPORT_INFLIGHT", "0")) or max(
-        4, min(max_workers, 8)
-    )
+    # Window of extracted-but-not-yet-converted objects. The window caps
+    # parallelism at its own size, so it must be at least the pool size or
+    # the pool starves; it also bounds the memory held by in-flight extracted
+    # data + payloads (scenes with a few huge objects never hold the whole
+    # scene's meshes at once). Defaults to the pool size; override with
+    # BLC_EXPORT_INFLIGHT.
+    inflight_max = int(os.environ.get("BLC_EXPORT_INFLIGHT", "0")) or max_workers
 
     results = [None] * len(jobs)
     debug = bool(os.environ.get("BLC_DEBUG_EXPORT"))
