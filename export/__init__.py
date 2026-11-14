@@ -129,6 +129,10 @@ class Exporter(object):
         # previous versions of the addon since opening the .blend file.
         utils_compatibility.run()
 
+        # Unpack all packed images to temp files in parallel, up front:
+        # the per-texture exports below then only hit the cache
+        ImageExporter.unpack_packed_images(bpy.data.images)
+
         # Scene
         image_resize_policy_props = (
             scene.luxcore.config.image_resize_policy.convert()
