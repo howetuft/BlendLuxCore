@@ -1,3 +1,59 @@
+# Copyright (C) 2025 AUTHORS
+
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the
+# Free Software Foundation, version 3.
+
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General
+# Public License for more details.
+
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
+
+"""Conversion of Blender mesh objects into LuxCore scene meshes.
+
+Entry points (called from export/__init__.py via the object cache):
+
+- convert(): convert a single object, serially (viewport / live-update path).
+- convert_objects(): batch entry point of the render-export pre-pass. Takes a
+  list of jobs (obj, mesh_key, transform, is_viewport_render, use_instancing,
+  share_points); returns a list of ExportedMesh aligned with the jobs.
+
+Both run the same 3-phase pipeline per object:
+
+1. extract_mesh_data() -- Blender API -> numpy arrays. Must run in the main
+   thread (Blender data is not thread-safe); this is why convert_objects()
+   extracts serially in the calling thread and only parallelizes phases 2+3.
+2. compute_submeshes() -- the C++/TBB implementation in pyluxcore
+   (compute_submeshes_c, GIL released): weld coincident points, split into
+   varying-data islands (union-find over shared edges with matching UV/normal
+   signatures, small-island merge), group triangles by (material, island) and
+   gather the per-submesh payloads (points, triangles, normals, UV/color/alpha
+   layers, creases, optional baked transform). With share_points=True all
+   submeshes of an object share one welded point buffer (needed by the C++
+   subdivision envelope); with False each submesh is compacted to the points
+   it uses (saves memory on fragment-heavy meshes).
+3. define_submeshes() -- build and insert the meshes into the LuxCore scene,
+   batched via Scene.DefineMeshesExt when available (one GIL release + one
+   mesh-def mutex acquisition per object), else one DefineMeshExt per submesh.
+   The material slot of each triangle is passed as the constant triangle AOV
+   MATERIAL_TRI_AOV_INDEX, which the C++ subdiv envelope builder reads to
+   split the subdivided result back per material.
+
+Threading model: convert_objects() runs phases 2+3 in a ThreadPoolExecutor of
+DEFAULT_EXPORT_WORKERS threads (BLC_EXPORT_WORKERS overrides), keeping a
+window of at most BLC_EXPORT_INFLIGHT extracted-but-not-yet-converted objects
+(default: the pool size) to bound peak memory. pyluxcore serializes the scene
+mesh mutations internally (mesh-def mutex) and releases the GIL around the
+C++ work, so worker threads are safe. Per-mesh log lines are buffered and
+printed by the main thread so they stay grouped by mesh.
+
+Other knobs: BLC_FORCE_SHARE_POINTS=1, BLC_DEBUG_EXPORT=1, BLC_DEBUG_MESH=1,
+BLC_TIME_STAGES=1 (per-stage timings in the log).
+"""
+
 import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
